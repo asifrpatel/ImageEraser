@@ -8,18 +8,16 @@ import android.graphics.Path;
 import android.support.v4.view.MotionEventCompat;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
+import android.util.Log;
 
 public class BrushImageView extends android.support.v7.widget.AppCompatImageView {
     int alpga;
     public float centerx;
     public float centery;
     int density;
-    public float largeRadious;
-    public Path lessoLineDrawingPath;
     DisplayMetrics metrics;
     public float offset;
     public float smallRadious;
-    public final float target_offset;
     public float width;
 
     public BrushImageView(Context context) {
@@ -27,14 +25,11 @@ public class BrushImageView extends android.support.v7.widget.AppCompatImageView
         this.metrics = getResources().getDisplayMetrics();
         this.density = (int) this.metrics.density;
         this.alpga = 200;
-        this.target_offset = (float) (this.density * 66);
         this.offset = (float) (this.density * 100);
         this.centerx = (float) (this.density * 166);
         this.centery = (float) (this.density * 200);
         this.width = (float) (this.density * 33);
         this.smallRadious = (float) (this.density * 3);
-        this.largeRadious = (float) (this.density * 33);
-        this.lessoLineDrawingPath = new Path();
     }
 
     public BrushImageView(Context context, AttributeSet attrs) {
@@ -42,19 +37,18 @@ public class BrushImageView extends android.support.v7.widget.AppCompatImageView
         this.metrics = getResources().getDisplayMetrics();
         this.density = (int) this.metrics.density;
         this.alpga = 200;
-        this.target_offset = (float) (this.density * 66);
         this.offset = (float) (this.density * 100);
         this.centerx = (float) (this.density * 166);
         this.centery = (float) (this.density * 200);
         this.width = (float) (this.density * 33);
         this.smallRadious = (float) (this.density * 3);
-        this.largeRadious = (float) (this.density * 33);
-        this.lessoLineDrawingPath = new Path();
     }
 
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        canvas.restore();
+        Log.e("SAVE_COUNT",""+canvas.getSaveCount());
+        if (canvas.getSaveCount() > 1)
+            canvas.restore();
         canvas.save();
         Paint p;
         if (this.offset > 0.0f) {

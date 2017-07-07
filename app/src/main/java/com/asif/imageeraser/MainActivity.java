@@ -6,6 +6,7 @@ import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Paint.Cap;
@@ -16,7 +17,12 @@ import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.PorterDuff.Mode;
 import android.graphics.PorterDuffXfermode;
+import android.graphics.Rect;
+import android.media.MediaScannerConnection;
+import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Environment;
 import android.support.v7.widget.AppCompatSeekBar;
 import android.support.v7.widget.AppCompatTextView;
 import android.support.v7.widget.LinearLayoutCompat;
@@ -24,19 +30,27 @@ import android.view.Display;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnTouchListener;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.SeekBar;
 import android.widget.SeekBar.OnSeekBarChangeListener;
+import android.widget.Toast;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Vector;
 
 public class MainActivity extends Activity {
 
-    private int initialDrawingCountLimit=20;
-    private int offset=250;
-    private int undoLimit=10;
-    private float brushSize=70.0f;
+    private int initialDrawingCountLimit = 20;
+    private int offset = 250;
+    private int undoLimit = 10;
+    private float brushSize = 70.0f;
 
     private boolean isMultipleTouchErasing;
     private boolean isTouchOnBitmap;
@@ -52,6 +66,7 @@ public class MainActivity extends Activity {
     private Bitmap lastEditedBitmap;
     private Bitmap originalBitmap;
     private Bitmap resizedBitmap;
+    private Bitmap highResolutionOutput;
 
     private Canvas canvasMaster;
     private Point mainViewSize;
@@ -64,26 +79,30 @@ public class MainActivity extends Activity {
     private ArrayList<Path> redoPaths;
 
     private RelativeLayout rlImageViewContainer;
-    private LinearLayoutCompat llBottomBar;
-    private LinearLayoutCompat llTopBar;
-    private AppCompatTextView tvRedo;
-    private AppCompatTextView tvUndo;
-    private AppCompatSeekBar sbOffset;
-    private AppCompatSeekBar sbWidth;
+    private LinearLayout llTopBar;
+    private ImageView ivRedo;
+    private ImageView ivUndo;
+    private ImageView ivDone;
+    private SeekBar sbOffset;
+    private SeekBar sbWidth;
     private TouchImageView touchImageView;
     private BrushImageView brushImageView;
 
+    private boolean isImageResized;
+    private MediaScannerConnection msConn;
+    private int MODE;
 
     public MainActivity() {
         paths = new ArrayList();
         redoPaths = new ArrayList();
         brushSizes = new Vector();
         redoBrushSizes = new Vector();
+        MODE=0;
     }
 
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main_eraser);
+        setContentView(R.layout.activity_main);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
         drawingPath = new Path();
@@ -103,31 +122,37 @@ public class MainActivity extends Activity {
     public void initViews() {
         touchImageView = (TouchImageView) findViewById(R.id.drawingImageView);
         brushImageView = (BrushImageView) findViewById(R.id.brushContainingView);
-        llTopBar = (LinearLayoutCompat) findViewById(R.id.ll_top_bar);
-        llBottomBar = (LinearLayoutCompat) findViewById(R.id.ll_bottom_bar);
+        llTopBar = (LinearLayout) findViewById(R.id.ll_top_bar);
         rlImageViewContainer = (RelativeLayout) findViewById(R.id.rl_image_view_container);
-        tvUndo = (AppCompatTextView) findViewById(R.id.tv_undo);
-        tvRedo = (AppCompatTextView) findViewById(R.id.tv_redo);
-        sbOffset = (AppCompatSeekBar) findViewById(R.id.sb_offset);
-        sbWidth = (AppCompatSeekBar) findViewById(R.id.sb_width);
+        ivUndo = (ImageView) findViewById(R.id.iv_undo);
+        ivRedo = (ImageView) findViewById(R.id.iv_redo);
+        ivDone = (ImageView) findViewById(R.id.iv_done);
+        sbOffset = (SeekBar) findViewById(R.id.sb_offset);
+        sbWidth = (SeekBar) findViewById(R.id.sb_width);
 
 
         rlImageViewContainer.getLayoutParams().height = mainViewSize.y
-                - (((llTopBar.getLayoutParams().height
-                + llBottomBar.getLayoutParams().height)));
+                - (llTopBar.getLayoutParams().height);
         imageViewWidth = mainViewSize.x;
         imageViewHeight = rlImageViewContainer.getLayoutParams().height;
 
-        tvUndo.setOnClickListener(new View.OnClickListener() {
+        ivUndo.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 undo();
             }
         });
 
-        tvRedo.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View Button) {
+        ivRedo.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
                 redo();
+            }
+        });
+
+        ivDone.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                saveImage();
             }
         });
 
@@ -142,8 +167,8 @@ public class MainActivity extends Activity {
     }
 
     public void resetPathArrays() {
-        tvUndo.setEnabled(false);
-        tvRedo.setEnabled(false);
+        ivUndo.setEnabled(false);
+        ivRedo.setEnabled(false);
         paths.clear();
         brushSizes.clear();
         redoPaths.clear();
@@ -151,7 +176,7 @@ public class MainActivity extends Activity {
     }
 
     public void resetRedoPathArrays() {
-        tvRedo.setEnabled(false);
+        ivRedo.setEnabled(false);
         redoPaths.clear();
         redoBrushSizes.clear();
     }
@@ -160,13 +185,13 @@ public class MainActivity extends Activity {
         int size = this.paths.size();
         if (size != 0) {
             if (size == 1) {
-                this.tvUndo.setEnabled(false);
+                this.ivUndo.setEnabled(false);
             }
             size--;
             redoPaths.add(paths.remove(size));
             redoBrushSizes.add(brushSizes.remove(size));
-            if (!tvRedo.isEnabled()) {
-                tvRedo.setEnabled(true);
+            if (!ivRedo.isEnabled()) {
+                ivRedo.setEnabled(true);
             }
             UpdateCanvas();
         }
@@ -176,19 +201,20 @@ public class MainActivity extends Activity {
         int size = redoPaths.size();
         if (size != 0) {
             if (size == 1) {
-                tvRedo.setEnabled(false);
+                ivRedo.setEnabled(false);
             }
             size--;
             paths.add(redoPaths.remove(size));
             brushSizes.add(redoBrushSizes.remove(size));
-            if (!tvUndo.isEnabled()) {
-                tvUndo.setEnabled(true);
+            if (!ivUndo.isEnabled()) {
+                ivUndo.setEnabled(true);
             }
             UpdateCanvas();
         }
     }
 
     public void setBitMap() {
+        this.isImageResized = false;
         if (resizedBitmap != null) {
             resizedBitmap.recycle();
             resizedBitmap = null;
@@ -236,6 +262,7 @@ public class MainActivity extends Activity {
         Paint paint = new Paint();
         paint.setFilterBitmap(true);
         canvas.drawBitmap(originalBitmap, transformation, paint);
+        this.isImageResized = true;
         return background;
     }
 
@@ -278,8 +305,8 @@ public class MainActivity extends Activity {
             brushSizes.remove(0);
         }
         if (paths.size() == 0) {
-            tvUndo.setEnabled(true);
-            tvRedo.setEnabled(false);
+            ivUndo.setEnabled(true);
+            ivRedo.setEnabled(false);
         }
         brushSizes.add(updatedBrushSize);
         paths.add(drawingPath);
@@ -398,6 +425,10 @@ public class MainActivity extends Activity {
             bitmapMaster.recycle();
             bitmapMaster = null;
         }
+        if (this.highResolutionOutput != null) {
+            this.highResolutionOutput.recycle();
+            this.highResolutionOutput = null;
+        }
     }
 
     private class OnTouchListner implements OnTouchListener {
@@ -413,30 +444,38 @@ public class MainActivity extends Activity {
                     initialDrawingCount = 0;
                 }
                 touchImageView.onTouchEvent(event);
+                MODE = 2;
             } else if (action == MotionEvent.ACTION_DOWN) {
                 isTouchOnBitmap = false;
                 touchImageView.onTouchEvent(event);
+                MODE = 1;
                 initialDrawingCount = 0;
                 isMultipleTouchErasing = false;
                 moveTopoint(event.getX(), event.getY());
 
                 updateBrush(event.getX(), event.getY());
             } else if (action == MotionEvent.ACTION_MOVE) {
-                currentx = event.getX();
-                currenty = event.getY();
+                if (MODE == 1) {
+                    currentx = event.getX();
+                    currenty = event.getY();
 
-                updateBrush(currentx, currenty);
-                lineTopoint(bitmapMaster, currentx, currenty);
+                    updateBrush(currentx, currenty);
+                    lineTopoint(bitmapMaster, currentx, currenty);
 
-                drawOnTouchMove();
-
+                    drawOnTouchMove();
+                }
             } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
-
-                if (isTouchOnBitmap) {
-                    addDrawingPathToArrayList();
+                if (MODE == 1) {
+                    if (isTouchOnBitmap) {
+                        addDrawingPathToArrayList();
+                    }
                 }
                 isMultipleTouchErasing = false;
                 initialDrawingCount = 0;
+                MODE = 0;
+            }
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
+                MODE = 0;
             }
             return true;
         }
@@ -473,4 +512,120 @@ public class MainActivity extends Activity {
         public void onStopTrackingTouch(SeekBar seekBar) {
         }
     }
+
+    private void saveImage() {
+        makeHighResolutionOutput();
+        new imageSaveByAsync().execute(new String[0]);
+    }
+
+    private void makeHighResolutionOutput() {
+        if (this.isImageResized) {
+            Bitmap solidColor = Bitmap.createBitmap(this.originalBitmap.getWidth(), this.originalBitmap.getHeight(), this.originalBitmap.getConfig());
+            Canvas canvas = new Canvas(solidColor);
+            Paint paint = new Paint();
+            paint.setColor(Color.argb(255, 255, 255, 255));
+            Rect src = new Rect(0, 0, this.bitmapMaster.getWidth(), this.bitmapMaster.getHeight());
+            Rect dest = new Rect(0, 0, this.originalBitmap.getWidth(), this.originalBitmap.getHeight());
+            canvas.drawRect(dest, paint);
+            paint.setXfermode(new PorterDuffXfermode(Mode.DST_OUT));
+            canvas.drawBitmap(this.bitmapMaster, src, dest, paint);
+            this.highResolutionOutput = null;
+            this.highResolutionOutput = Bitmap.createBitmap(this.originalBitmap.getWidth(), this.originalBitmap.getHeight(), this.originalBitmap.getConfig());
+            Canvas canvas1 = new Canvas(this.highResolutionOutput);
+            canvas1.drawBitmap(this.originalBitmap, 0.0f, 0.0f, null);
+            Paint paint1 = new Paint();
+            paint1.setXfermode(new PorterDuffXfermode(Mode.DST_OUT));
+            canvas1.drawBitmap(solidColor, 0.0f, 0.0f, paint1);
+            if (solidColor != null && !solidColor.isRecycled()) {
+                solidColor.recycle();
+                solidColor = null;
+            }
+            return;
+        }
+        this.highResolutionOutput = null;
+        this.highResolutionOutput = this.bitmapMaster.copy(this.bitmapMaster.getConfig(), true);
+    }
+
+    private class imageSaveByAsync extends AsyncTask<String, Void, Boolean> {
+        private imageSaveByAsync() {
+        }
+
+        protected void onPreExecute() {
+            getWindow().setFlags(16, 16);
+        }
+
+        protected Boolean doInBackground(String... args) {
+            try {
+                savePhoto(highResolutionOutput);
+                return Boolean.valueOf(true);
+            } catch (Exception e) {
+                return Boolean.valueOf(false);
+            }
+        }
+
+        protected void onPostExecute(Boolean success) {
+            Toast toast = Toast.makeText(getBaseContext(), "PNG Saved", Toast.LENGTH_LONG);
+            toast.setGravity(17, 0, 0);
+            toast.show();
+            getWindow().clearFlags(16);
+
+        }
+    }
+
+    public void savePhoto(Bitmap bmp) {
+        File imageFileName;
+        FileOutputStream out;
+        File imageFileFolder = new File(Environment.getExternalStorageDirectory(), "ImageEraser");
+        imageFileFolder.mkdir();
+        Calendar c = Calendar.getInstance();
+        String date = String.valueOf(c.get(Calendar.MONTH))
+                + String.valueOf(c.get(Calendar.DAY_OF_MONTH))
+                + String.valueOf(c.get(Calendar.YEAR))
+                + String.valueOf(c.get(Calendar.HOUR_OF_DAY))
+                + String.valueOf(c.get(Calendar.MINUTE))
+                + String.valueOf(c.get(Calendar.SECOND));
+        FileOutputStream out2;
+
+
+        imageFileName = new File(imageFileFolder, date.toString() + ".png");
+        try {
+            out2 = new FileOutputStream(imageFileName);
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, out2);
+            out = out2;
+            out.flush();
+            out.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        if (bmp != null && !bmp.isRecycled()) {
+            bmp.recycle();
+            bmp = null;
+        }
+        scanPhoto(imageFileName.toString());
+    }
+
+    public void scanPhoto(String imageFileName) {
+        this.msConn = new MediaScannerConnection(this, new ScanPhotoConnection(imageFileName));
+        this.msConn.connect();
+    }
+
+    class ScanPhotoConnection implements MediaScannerConnection.MediaScannerConnectionClient {
+        final String val$imageFileName;
+
+        ScanPhotoConnection(String str) {
+            this.val$imageFileName = str;
+        }
+
+        public void onMediaScannerConnected() {
+            msConn.scanFile(this.val$imageFileName, null);
+        }
+
+        public void onScanCompleted(String path, Uri uri) {
+            msConn.disconnect();
+        }
+    }
+
+
 }

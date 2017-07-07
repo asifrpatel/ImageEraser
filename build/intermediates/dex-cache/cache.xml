@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<items version="2" >
+
+    <item
+        is-multidex="true"
+        jar="/home/asif/asif/projects/android/ImageEraser/app/build/intermediates/incremental-classes/debug/instant-run-bootstrap.jar"
+        jumboMode="true"
+        optimize="true"
+        revision="25.0.2"
+        sha1="078e88a25d0242b503f31ee4db0437e833f70f83">
+        <dex dex="/home/asif/asif/projects/android/ImageEraser/app/build/intermediates/transforms/dex/debug/folders/1000/10000/instant-run-bootstrap_fc3b76397bea4cef34374a13e45d246cc84cbbbc/classes.dex" />
+    </item>
+    <item
+        is-multidex="true"
+        jar="/home/asif/asif/projects/android/ImageEraser/app/build/intermediates/incremental-runtime-classes/debug/instant-run.jar"
+        jumboMode="true"
+        optimize="true"
+        revision="25.0.2"
+        sha1="caff8e51a24901cfc9cd7e1cf83d84f4cb0c103b">
+        <dex dex="/home/asif/asif/projects/android/ImageEraser/app/build/intermediates/transforms/dex/debug/folders/1000/10000/instant-run_ed7c363db4b37712095376edc43d81eff689d5ab/classes.dex" />
+    </item>
+
+</items>

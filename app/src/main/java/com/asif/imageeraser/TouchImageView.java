@@ -55,8 +55,8 @@ public class TouchImageView extends android.support.v7.widget.AppCompatImageView
     private int viewHeight;
     private int viewWidth;
 
-    static /* synthetic */ class C03231 {
-        static final /* synthetic */ int[] $SwitchMap$android$widget$ImageView$ScaleType;
+    static class C03231 {
+        static final int[] $SwitchMap$android$widget$ImageView$ScaleType;
 
         static {
             $SwitchMap$android$widget$ImageView$ScaleType = new int[ScaleType.values().length];
